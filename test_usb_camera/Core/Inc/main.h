@@ -29,6 +29,7 @@ extern "C" {
 
 /* Includes ------------------------------------------------------------------*/
 #include "stm32f4xx_hal.h"
+#include "stm32f4xx_hal.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -57,11 +58,11 @@ void delay_ms(uint32_t);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
+#define PCLK_Pin GPIO_PIN_4
+#define PCLK_GPIO_Port GPIOH
+#define PCLK_EXTI_IRQn EXTI4_IRQn
 #define PWDN_Pin GPIO_PIN_5
 #define PWDN_GPIO_Port GPIOH
-#define PCLK_Pin GPIO_PIN_6
-#define PCLK_GPIO_Port GPIOA
-#define PCLK_EXTI_IRQn EXTI9_5_IRQn
 #define LED1_Pin GPIO_PIN_0
 #define LED1_GPIO_Port GPIOB
 #define LED0_Pin GPIO_PIN_1
@@ -72,9 +73,6 @@ void delay_ms(uint32_t);
 #define SDA_GPIO_Port GPIOB
 #define SCL_Pin GPIO_PIN_4
 #define SCL_GPIO_Port GPIOB
-#define VSYNC_Pin GPIO_PIN_7
-#define VSYNC_GPIO_Port GPIOB
-#define VSYNC_EXTI_IRQn EXTI9_5_IRQn
 /* USER CODE BEGIN Private defines */
 
 /* USER CODE END Private defines */

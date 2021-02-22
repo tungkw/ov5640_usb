@@ -19,12 +19,18 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "dcmi.h"
+#include "dma.h"
 #include "usb_device.h"
 #include "gpio.h"
+#include "fmc.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "usbd_cdc_if.h"
 #include "hardware.h"
+//#include "sdram.h"
+#include "usb_app.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -55,45 +61,141 @@ void SystemClock_Config(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-#define BUFFER_SIZE	2048
-uint8_t dcmi_buffer[2][BUFFER_SIZE];
-uint8_t current_buf = 0;
-uint32_t cnt = 0;
-uint8_t pixel_data = 0;
-void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
-{
-	if(GPIO_Pin == GPIO_PIN_6)
-	{
-//		HW_LED_turn(&led1);
-//		pixel_data = HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_9);
-//		pixel_data <<= 1;
-//		pixel_data += HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_8);
-//		pixel_data <<= 1;
-//		pixel_data += HAL_GPIO_ReadPin(GPIOD, GPIO_PIN_3);
-//		pixel_data <<= 1;
-//		pixel_data += HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_11);
-//		pixel_data <<= 1;
-//		pixel_data += HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_9);
-//		pixel_data <<= 1;
-//		pixel_data += HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_8);
-//		pixel_data <<= 1;
-//		pixel_data += HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_7);
-//		pixel_data <<= 1;
-//		pixel_data += HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_6);
 
-		dcmi_buffer[current_buf][cnt] = 'a'+current_buf;
-		cnt = (cnt+1)%BUFFER_SIZE;
+#define BUFFER_SIZE 2*1024
+#define DATA_SIZE 30*1024
+
+uint32_t jpeg_data[DATA_SIZE]__attribute__((at(0XC0000000+1280*800*2)));
+uint32_t jpeg_buffer[2][BUFFER_SIZE];
+uint32_t jpeg_data_len = 0;
+uint8_t jpeg_process_state = 0;
+uint8_t current_buffer = 0;
+uint8_t buf[4];
+
+
+void save_buffer(uint8_t buffer_num)
+{
+	uint32_t *p = jpeg_data + jpeg_data_len;
+	for(uint32_t i=0; i<BUFFER_SIZE; i++)
+	{
+		p[i] = jpeg_buffer[buffer_num][i];
 	}
-	if(GPIO_Pin == GPIO_PIN_7)
+	jpeg_data_len = jpeg_data_len+BUFFER_SIZE;
+}
+
+
+void data_process()
+{
+	if(jpeg_process_state == 0)
+	{
+		save_buffer(current_buffer);
+		jpeg_process_state = 1;
+	}
+	else if(jpeg_process_state == 2)
+	{
+		jpeg_process_state = 0;
+		jpeg_data_len = 0;
+	}
+}
+
+
+//void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
+//{
+//	if(jpeg_process_state == 0)
+//	{
+//		save_buffer(1);
+//	}
+//	current_buffer = 0;
+//}
+
+//void HAL_TIM_IC_CaptureHalfCpltCallback(TIM_HandleTypeDef *htim)
+//{
+//	if(jpeg_process_state == 0)
+//	{
+//		save_buffer(0);
+//	}
+//	current_buffer = 1;
+//}
+
+//void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
+//{
+//	if(GPIO_Pin == GPIO_PIN_4)
+//	{
+//		if(jpeg_process_state)
+//		{
+//			jpeg_data[jpeg_data_len++] = GPIOI->IDR;
+//		}
+//	}
+//	else if(GPIO_Pin == GPIO_PIN_7)
+//	{
+//		data_process();
+//	}
+//}
+
+
+void HAL_DCMI_VsyncEventCallback(DCMI_HandleTypeDef *hdcmi)
+{
+	data_process();//jpeg数据处理
+  __HAL_DCMI_ENABLE_IT(hdcmi, DCMI_FLAG_VSYNCRI);
+}
+
+void DCMI_DMAXferCplt(DMA_HandleTypeDef *hdma)
+{
+	if(jpeg_process_state==0)
 	{
 		HW_LED_turn(&led0);
-		CDC_Transmit_FS(dcmi_buffer[current_buf], cnt);
-		current_buf = !current_buf;
-		cnt = 0;
+		save_buffer(0);
 	}
-	
-	//HAL_NVIC_ClearPendingIRQ(EXTI9_5_IRQn);
+	current_buffer = 1;
 }
+
+void DCMI_DMAXferM1Cplt(DMA_HandleTypeDef *hdma)
+{
+	if(jpeg_process_state==0)
+	{
+		HW_LED_turn(&led1);
+		save_buffer(1);
+	}
+	current_buffer = 0;
+}
+
+void DCMI_DMAXferError(DMA_HandleTypeDef *hdma)
+{
+	UNUSED(hdma);
+}
+
+HAL_StatusTypeDef dcmi_start(DCMI_HandleTypeDef* hdcmi, uint32_t DCMI_Mode, uint32_t pData, uint32_t pData2, uint32_t Length)
+{
+  /* Process Locked */
+  __HAL_LOCK(hdcmi);
+
+  /* Lock the DCMI peripheral state */
+  hdcmi->State = HAL_DCMI_STATE_BUSY;
+  
+  /* Enable DCMI by setting DCMIEN bit */
+  __HAL_DCMI_ENABLE(hdcmi);
+
+  /* Configure the DCMI Mode */
+  hdcmi->Instance->CR &= ~(DCMI_CR_CM);
+  hdcmi->Instance->CR |=  (uint32_t)(DCMI_Mode);
+  
+  hdcmi->XferCount = 0U;
+  hdcmi->XferTransferNumber = 0U;
+	
+//	__HAL_UNLOCK(&hdma_dcmi);
+	hdcmi->DMA_Handle->XferCpltCallback = DCMI_DMAXferCplt;
+	hdcmi->DMA_Handle->XferM1CpltCallback = DCMI_DMAXferM1Cplt;
+	hdcmi->DMA_Handle->XferErrorCallback = DCMI_DMAXferError;
+	HAL_DMAEx_MultiBufferStart_IT(hdcmi->DMA_Handle, (uint32_t)&hdcmi->Instance->DR, (uint32_t)pData, (uint32_t)pData2, Length);
+
+  /* Enable Capture */
+  hdcmi->Instance->CR |= DCMI_CR_CAPTURE;
+
+  /* Release Lock */
+  __HAL_UNLOCK(hdcmi);
+  return HAL_OK;
+}
+
 /* USER CODE END 0 */
 
 /**
@@ -124,19 +226,26 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
+  MX_DMA_Init();
   MX_USB_DEVICE_Init();
+  MX_DCMI_Init();
+  MX_FMC_Init();
   /* USER CODE BEGIN 2 */
-	HAL_NVIC_DisableIRQ(EXTI9_5_IRQn);
 	
+	// sdram
+//	SDRAM_Init();
+	
+	// led
 	led_init();
 	HW_LED_set(&led0, HW_LED_OFF);
 	HW_LED_set(&led1, HW_LED_OFF);
 	delay_ms(1000);
 	
+	// ov5640
 	ov5640_init();
-// 	HW_OV5640_set_rgb565(&ov5640);		//JPEG模式
+ 	HW_OV5640_set_rgb565(&ov5640);
 ////	OV5640_Focus_Init();
-	HW_OV5640_set_jpeg(&ov5640);	//RGB565模式 
+	HW_OV5640_set_jpeg(&ov5640);
 ////	OV5640_Light_Mode(0);	//自动模式
 ////	OV5640_Color_Saturation(3);//色彩饱和度0
 ////	OV5640_Brightness(4);	//亮度0
@@ -145,19 +254,54 @@ int main(void)
 ////	OV5640_Focus_Constant();//启动持续对焦
  	HW_OV5640_set_resolution(&ov5640, 4,0,320,240);//设置输出尺寸 
 
-	
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-	HAL_NVIC_EnableIRQ(EXTI9_5_IRQn);
-  while (1)
+//	jpeg_process_state = 2;
+//  HAL_NVIC_EnableIRQ(EXTI4_IRQn);
+//	HAL_TIM_IC_Start_DMA(&htim8, TIM_CHANNEL_1, (uint32_t*)jpeg_buffer, BUFFER_SIZE*2);
+//	HAL_NVIC_EnableIRQ(EXTI9_5_IRQn);
+
+//	HAL_DCMI_Start_DMA(&hdcmi, DCMI_MODE_CONTINUOUS, (uint32_t)jpeg_buffer, BUFFER_SIZE*2);
+	dcmi_start(&hdcmi, DCMI_MODE_CONTINUOUS, (uint32_t)&jpeg_buffer[0], (uint32_t)&jpeg_buffer[1], BUFFER_SIZE);
+	
+	while (1)
   {
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-//		HW_LED_turn(&led0);
-//		delay_ms(1000);
+		if(jpeg_process_state==1)
+		{
+			uint8_t *p = (uint8_t*)jpeg_data;
+			uint8_t find_head = 0;
+			uint32_t head_idx = 0;
+			uint32_t jpeg_len = 0;
+			if(jpeg_data_len)
+			{
+				for(uint32_t i = 0 ; i < jpeg_data_len*4-1; i++)
+				{
+					if(p[i]==0xff && p[i+1]==0xd8)
+					{
+						head_idx = i;
+						find_head = 1;
+					}
+					else if(p[i]==0xff && p[i+1]==0xd9 && find_head)
+					{
+						jpeg_len = i+2-head_idx;
+						break;
+					}
+				}
+			}
+			// if data correct transmit jpeg via usb
+			if(jpeg_len)
+			{
+//				USB2PC((uint8_t*)jpeg_data+head_idx, jpeg_len);
+				CDC_Transmit_FS((uint8_t*)jpeg_data + head_idx, jpeg_len);
+			}
+			// process finish;
+			jpeg_process_state = 2;
+		}
   }
   /* USER CODE END 3 */
 }

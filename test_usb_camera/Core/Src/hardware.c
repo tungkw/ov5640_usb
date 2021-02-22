@@ -80,6 +80,3 @@ void ov5640_init()
 	HW_OV5640_SCCB_write_reg(&ov5640, 0X3019, 0X00);
 }
 
-
-
-

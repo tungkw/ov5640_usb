@@ -3,6 +3,9 @@
 "test_usb_camera\hardware.o"
 "test_usb_camera\main.o"
 "test_usb_camera\gpio.o"
+"test_usb_camera\dcmi.o"
+"test_usb_camera\dma.o"
+"test_usb_camera\fmc.o"
 "test_usb_camera\stm32f4xx_it.o"
 "test_usb_camera\stm32f4xx_hal_msp.o"
 "test_usb_camera\usb_device.o"
@@ -25,6 +28,10 @@
 "test_usb_camera\stm32f4xx_hal_cortex.o"
 "test_usb_camera\stm32f4xx_hal.o"
 "test_usb_camera\stm32f4xx_hal_exti.o"
+"test_usb_camera\stm32f4xx_hal_dcmi.o"
+"test_usb_camera\stm32f4xx_hal_dcmi_ex.o"
+"test_usb_camera\stm32f4xx_ll_fmc.o"
+"test_usb_camera\stm32f4xx_hal_sdram.o"
 "test_usb_camera\stm32f4xx_hal_tim.o"
 "test_usb_camera\stm32f4xx_hal_tim_ex.o"
 "test_usb_camera\system_stm32f4xx.o"
@@ -34,6 +41,7 @@
 "test_usb_camera\usbd_cdc.o"
 "test_usb_camera\led.o"
 "test_usb_camera\ov5640.o"
+"test_usb_camera\usb_app.o"
 --library_type=microlib --strict --scatter "test_usb_camera\test_usb_camera.sct"
 --summary_stderr --info summarysizes --map --xref --callgraph --symbols
 --info sizes --info totals --info unused --info veneers
